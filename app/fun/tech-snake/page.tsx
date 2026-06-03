@@ -5,7 +5,7 @@ import Link from "next/link";
 
 const GRID_SIZE = 20;
 const CELL_SIZE = 20;
-const INITIAL_SPEED = 150;
+const INITIAL_SPEED = 250;
 
 const ALL_SKILLS = [
   "React", "TypeScript", "Golang", "Node.js", "Firebase",
@@ -21,19 +21,39 @@ interface Food {
   name: string;
 }
 
+function spawnFoodPosition(snakeBody: Position[]): Position {
+  let position: Position;
+  let attempts = 0;
+  do {
+    position = {
+      x: Math.floor(Math.random() * GRID_SIZE),
+      y: Math.floor(Math.random() * GRID_SIZE),
+    };
+    attempts++;
+  } while (
+    snakeBody.some((s) => s.x === position.x && s.y === position.y) &&
+    attempts < 100
+  );
+  return position;
+}
+
 export default function TechSnakePage() {
   const [snake, setSnake] = useState<Position[]>([{ x: 10, y: 10 }]);
   const [food, setFood] = useState<Food | null>(null);
-  const [direction, setDirection] = useState<Direction>("RIGHT");
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [collectedSkills, setCollectedSkills] = useState<string[]>([]);
-  const [remainingSkills, setRemainingSkills] = useState<string[]>([]);
   const [allCollected, setAllCollected] = useState(false);
   const [highScore, setHighScore] = useState(0);
   const [speed, setSpeed] = useState(INITIAL_SPEED);
 
-  const directionRef = useRef(direction);
+  // Use refs for game state to avoid stale closures in the game loop
+  const directionRef = useRef<Direction>("RIGHT");
+  const snakeRef = useRef<Position[]>([{ x: 10, y: 10 }]);
+  const foodRef = useRef<Food | null>(null);
+  const collectedRef = useRef<string[]>([]);
+  const remainingRef = useRef<string[]>([]);
+  const isPlayingRef = useRef(false);
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -41,166 +61,188 @@ export default function TechSnakePage() {
     if (stored) setHighScore(parseInt(stored));
   }, []);
 
-  const spawnFood = useCallback((snakeBody: Position[], skills: string[]): Food | null => {
-    if (skills.length === 0) return null;
-    const skill = skills[0];
-    let position: Position;
-    let attempts = 0;
-    do {
-      position = {
-        x: Math.floor(Math.random() * GRID_SIZE),
-        y: Math.floor(Math.random() * GRID_SIZE),
-      };
-      attempts++;
-    } while (
-      snakeBody.some((s) => s.x === position.x && s.y === position.y) &&
-      attempts < 100
-    );
-    return { position, name: skill };
+  const stopGame = useCallback(() => {
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    if (gameLoopRef.current) {
+      clearInterval(gameLoopRef.current);
+      gameLoopRef.current = null;
+    }
   }, []);
 
   const startGame = useCallback(() => {
     const initialSnake = [{ x: 10, y: 10 }];
     const shuffled = [...ALL_SKILLS].sort(() => Math.random() - 0.5);
-    setSnake(initialSnake);
-    setDirection("RIGHT");
+    const firstFood: Food = { position: { x: 15, y: 10 }, name: shuffled[0] };
+
+    snakeRef.current = initialSnake;
+    foodRef.current = firstFood;
+    collectedRef.current = [];
+    remainingRef.current = shuffled.slice(1);
     directionRef.current = "RIGHT";
+    isPlayingRef.current = true;
+
+    setSnake(initialSnake);
+    setFood(firstFood);
     setCollectedSkills([]);
-    setRemainingSkills(shuffled.slice(1));
-    setFood({ position: { x: 15, y: 10 }, name: shuffled[0] });
     setIsPlaying(true);
     setIsGameOver(false);
     setAllCollected(false);
     setSpeed(INITIAL_SPEED);
   }, []);
 
-  const gameOver = useCallback(() => {
-    setIsPlaying(false);
-    setIsGameOver(true);
-    if (collectedSkills.length > highScore) {
-      setHighScore(collectedSkills.length);
-      localStorage.setItem("nhn-snake-highscore", collectedSkills.length.toString());
-    }
-    if (gameLoopRef.current) clearInterval(gameLoopRef.current);
-  }, [collectedSkills.length, highScore]);
-
-  // Game loop
+  // Game loop using refs for clean state access
   useEffect(() => {
     if (!isPlaying) return;
 
-    gameLoopRef.current = setInterval(() => {
-      setSnake((prevSnake) => {
-        const head = { ...prevSnake[0] };
-        const dir = directionRef.current;
+    let currentSpeed = speed;
 
-        if (dir === "UP") head.y -= 1;
-        if (dir === "DOWN") head.y += 1;
-        if (dir === "LEFT") head.x -= 1;
-        if (dir === "RIGHT") head.x += 1;
+    const tick = () => {
+      if (!isPlayingRef.current) return;
 
-        // Wall collision
-        if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
-          gameOver();
-          return prevSnake;
-        }
+      const prevSnake = snakeRef.current;
+      const head = { ...prevSnake[0] };
+      const dir = directionRef.current;
 
-        // Self collision
-        if (prevSnake.some((s) => s.x === head.x && s.y === head.y)) {
-          gameOver();
-          return prevSnake;
-        }
+      if (dir === "UP") head.y -= 1;
+      if (dir === "DOWN") head.y += 1;
+      if (dir === "LEFT") head.x -= 1;
+      if (dir === "RIGHT") head.x += 1;
 
-        const newSnake = [head, ...prevSnake];
-
-        // Check food collision
-        setFood((currentFood) => {
-          if (currentFood && head.x === currentFood.position.x && head.y === currentFood.position.y) {
-            setCollectedSkills((prev) => {
-              const updated = [...prev, currentFood.name];
-              if (updated.length >= ALL_SKILLS.length) {
-                setAllCollected(true);
-                setIsPlaying(false);
-                if (gameLoopRef.current) clearInterval(gameLoopRef.current);
-              }
-              return updated;
-            });
-            setRemainingSkills((prev) => {
-              const next = prev.slice(1);
-              const nextFood = spawnFood(newSnake, next.length > 0 ? next : []);
-              if (next.length > 0) {
-                setFood({ position: nextFood!.position, name: next[0] });
-              } else {
-                setFood(null);
-              }
-              return next;
-            });
-            setSpeed((s) => Math.max(80, s - 5));
-            return currentFood;
+      // Wall collision
+      if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
+        stopGame();
+        setIsGameOver(true);
+        const count = collectedRef.current.length;
+        setHighScore((prev) => {
+          if (count > prev) {
+            localStorage.setItem("nhn-snake-highscore", count.toString());
+            return count;
           }
-          return currentFood;
+          return prev;
         });
+        return;
+      }
 
-        // Check if we ate food (don't pop tail)
-        if (food && head.x === food.position.x && head.y === food.position.y) {
-          return newSnake;
+      // Self collision
+      if (prevSnake.some((s) => s.x === head.x && s.y === head.y)) {
+        stopGame();
+        setIsGameOver(true);
+        const count = collectedRef.current.length;
+        setHighScore((prev) => {
+          if (count > prev) {
+            localStorage.setItem("nhn-snake-highscore", count.toString());
+            return count;
+          }
+          return prev;
+        });
+        return;
+      }
+
+      const newSnake = [head, ...prevSnake];
+      let ate = false;
+
+      // Check food collision
+      const currentFood = foodRef.current;
+      if (currentFood && head.x === currentFood.position.x && head.y === currentFood.position.y) {
+        ate = true;
+        // Add to collected
+        collectedRef.current = [...collectedRef.current, currentFood.name];
+        setCollectedSkills([...collectedRef.current]);
+
+        // Check if all collected
+        if (collectedRef.current.length >= ALL_SKILLS.length) {
+          snakeRef.current = newSnake;
+          setSnake(newSnake);
+          foodRef.current = null;
+          setFood(null);
+          stopGame();
+          setAllCollected(true);
+          return;
         }
 
+        // Spawn next food
+        if (remainingRef.current.length > 0) {
+          const nextSkill = remainingRef.current[0];
+          remainingRef.current = remainingRef.current.slice(1);
+          const nextPos = spawnFoodPosition(newSnake);
+          const nextFood: Food = { position: nextPos, name: nextSkill };
+          foodRef.current = nextFood;
+          setFood(nextFood);
+        } else {
+          foodRef.current = null;
+          setFood(null);
+        }
+
+        // Speed up slightly
+        currentSpeed = Math.max(120, currentSpeed - 5);
+        setSpeed(currentSpeed);
+      }
+
+      // Update snake
+      if (!ate) {
         newSnake.pop();
-        return newSnake;
-      });
-    }, speed);
+      }
+      snakeRef.current = newSnake;
+      setSnake(newSnake);
+    };
+
+    gameLoopRef.current = setInterval(tick, currentSpeed);
 
     return () => {
-      if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+      if (gameLoopRef.current) {
+        clearInterval(gameLoopRef.current);
+        gameLoopRef.current = null;
+      }
     };
-  }, [isPlaying, speed, food, gameOver, spawnFood]);
+  }, [isPlaying, speed, stopGame]);
 
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isPlaying) return;
+      if (!isPlayingRef.current) return;
       const dir = directionRef.current;
       if ((e.key === "ArrowUp" || e.key === "w") && dir !== "DOWN") {
         directionRef.current = "UP";
-        setDirection("UP");
       }
       if ((e.key === "ArrowDown" || e.key === "s") && dir !== "UP") {
         directionRef.current = "DOWN";
-        setDirection("DOWN");
       }
       if ((e.key === "ArrowLeft" || e.key === "a") && dir !== "RIGHT") {
         directionRef.current = "LEFT";
-        setDirection("LEFT");
       }
       if ((e.key === "ArrowRight" || e.key === "d") && dir !== "LEFT") {
         directionRef.current = "RIGHT";
-        setDirection("RIGHT");
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPlaying]);
+  }, []);
 
-  // Touch controls
-  const touchStartRef = useRef<Position | null>(null);
-
+  // Touch controls — direction based on tap position relative to snake head
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  };
+    if (!isPlayingRef.current) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const tapX = touch.clientX - rect.left;
+    const tapY = touch.clientY - rect.top;
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStartRef.current || !isPlaying) return;
-    const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
-    const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
+    // Snake head position in pixels
+    const headX = snakeRef.current[0].x * CELL_SIZE + CELL_SIZE / 2;
+    const headY = snakeRef.current[0].y * CELL_SIZE + CELL_SIZE / 2;
+
+    const dx = tapX - headX;
+    const dy = tapY - headY;
     const dir = directionRef.current;
 
     if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0 && dir !== "LEFT") { directionRef.current = "RIGHT"; setDirection("RIGHT"); }
-      if (dx < 0 && dir !== "RIGHT") { directionRef.current = "LEFT"; setDirection("LEFT"); }
+      if (dx > 0 && dir !== "LEFT") directionRef.current = "RIGHT";
+      else if (dx < 0 && dir !== "RIGHT") directionRef.current = "LEFT";
     } else {
-      if (dy > 0 && dir !== "UP") { directionRef.current = "DOWN"; setDirection("DOWN"); }
-      if (dy < 0 && dir !== "DOWN") { directionRef.current = "UP"; setDirection("UP"); }
+      if (dy > 0 && dir !== "UP") directionRef.current = "DOWN";
+      else if (dy < 0 && dir !== "DOWN") directionRef.current = "UP";
     }
   };
 
@@ -221,7 +263,7 @@ export default function TechSnakePage() {
               <p className="text-light-300 mb-3">
                 Eat all the tech skills to build the ultimate stack! Hit a wall or yourself = game over.
               </p>
-              <p className="text-sm text-light-400">Controls: Arrow keys or WASD. Swipe on mobile.</p>
+              <p className="text-sm text-light-400">Controls: Arrow keys or WASD. Tap on mobile.</p>
               {highScore > 0 && (
                 <p className="text-sm text-light-400 mt-2">
                   🏆 High score: <span className="text-accent-400 font-semibold">{highScore} skills</span>
@@ -246,10 +288,9 @@ export default function TechSnakePage() {
                 {food && <span className="text-accent-400">Next: {food.name}</span>}
               </div>
               <div
-                className="relative border-2 border-dark-700 rounded-lg overflow-hidden bg-dark-900"
+                className="relative border-2 border-dark-700 rounded-lg overflow-hidden bg-dark-900 touch-none"
                 style={{ width: GRID_SIZE * CELL_SIZE, height: GRID_SIZE * CELL_SIZE }}
                 onTouchStart={handleTouchStart}
-                onTouchEnd={handleTouchEnd}
               >
                 {/* Snake */}
                 {snake.map((segment, i) => (
@@ -267,7 +308,7 @@ export default function TechSnakePage() {
                 {/* Food */}
                 {food && (
                   <div
-                    className="absolute bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-dark-900"
+                    className="absolute bg-yellow-400 rounded-full"
                     style={{
                       left: food.position.x * CELL_SIZE,
                       top: food.position.y * CELL_SIZE,
@@ -285,9 +326,9 @@ export default function TechSnakePage() {
                 Stack Built ({collectedSkills.length})
               </h3>
               <div className="flex flex-wrap gap-2">
-                {collectedSkills.map((skill) => (
+                {collectedSkills.map((skill, index) => (
                   <span
-                    key={skill}
+                    key={`${skill}-${index}`}
                     className="text-xs bg-accent-500/20 text-accent-400 border border-accent-500/50 px-2 py-1 rounded animate-fade-in"
                   >
                     {skill}
