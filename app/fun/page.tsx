@@ -39,6 +39,20 @@ export default function FunPage() {
               Flip cards and match pairs of my tech skills. How fast can you clear the board?
             </p>
           </Link>
+
+          {/* Tech Snake */}
+          <Link
+            href="/fun/tech-snake"
+            className="group bg-dark-800 rounded-lg p-6 border border-dark-700 hover:border-accent-400 transition-colors"
+          >
+            <div className="text-4xl mb-4">🐍</div>
+            <h2 className="text-xl font-semibold text-light-100 mb-2 group-hover:text-accent-400 transition-colors">
+              Tech Snake
+            </h2>
+            <p className="text-light-400 text-sm">
+              Eat all the tech skills to build the ultimate stack. Can you collect them all?
+            </p>
+          </Link>
         </div>
       </div>
     </main>
