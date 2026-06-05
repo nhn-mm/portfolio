@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { usePathname } from "next/navigation";
 import type { NavLink } from "@/types";
 import MobileMenu from "./MobileMenu";
 
@@ -16,6 +17,14 @@ const navLinks: NavLink[] = [
 
 export default function NavigationBar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+
+  const getHref = (href: string) => {
+    if (href.startsWith("#") && pathname !== "/") {
+      return `/${href}`;
+    }
+    return href;
+  };
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen((prev) => !prev);
@@ -34,7 +43,7 @@ export default function NavigationBar() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo / Brand */}
           <a
-            href="#hero"
+            href={getHref("#hero")}
             className="text-lg font-semibold text-light-100 hover:text-accent-400 transition-colors"
           >
             NHN
@@ -45,7 +54,7 @@ export default function NavigationBar() {
             {navLinks.map((link) => (
               <li key={link.href}>
                 <a
-                  href={link.href}
+                  href={getHref(link.href)}
                   className="text-sm text-light-400 hover:text-accent-400 transition-colors"
                 >
                   {link.label}
@@ -94,6 +103,7 @@ export default function NavigationBar() {
         isOpen={isMobileMenuOpen}
         onClose={closeMobileMenu}
         navLinks={navLinks}
+        getHref={getHref}
       />
     </nav>
   );

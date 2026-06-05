@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 
 const GRID_SIZE = 20;
-const CELL_SIZE = 20;
 const INITIAL_SPEED = 250;
 
 const ALL_SKILLS = [
@@ -46,6 +45,9 @@ export default function TechSnakePage() {
   const [allCollected, setAllCollected] = useState(false);
   const [highScore, setHighScore] = useState(0);
   const [speed, setSpeed] = useState(INITIAL_SPEED);
+  const [cellSize, setCellSize] = useState(20);
+
+  const boardContainerRef = useRef<HTMLDivElement>(null);
 
   // Use refs for game state to avoid stale closures in the game loop
   const directionRef = useRef<Direction>("RIGHT");
@@ -59,6 +61,21 @@ export default function TechSnakePage() {
   useEffect(() => {
     const stored = localStorage.getItem("nhn-snake-highscore");
     if (stored) setHighScore(parseInt(stored));
+  }, []);
+
+  // Compute cell size based on available width
+  useEffect(() => {
+    const updateSize = () => {
+      const container = boardContainerRef.current;
+      if (container) {
+        const available = container.clientWidth;
+        const size = Math.floor(available / GRID_SIZE);
+        setCellSize(Math.min(size, 20));
+      }
+    };
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
   }, []);
 
   const stopGame = useCallback(() => {
@@ -230,8 +247,8 @@ export default function TechSnakePage() {
     const tapY = touch.clientY - rect.top;
 
     // Snake head position in pixels
-    const headX = snakeRef.current[0].x * CELL_SIZE + CELL_SIZE / 2;
-    const headY = snakeRef.current[0].y * CELL_SIZE + CELL_SIZE / 2;
+    const headX = snakeRef.current[0].x * cellSize + cellSize / 2;
+    const headY = snakeRef.current[0].y * cellSize + cellSize / 2;
 
     const dx = tapX - headX;
     const dy = tapY - headY;
@@ -282,14 +299,14 @@ export default function TechSnakePage() {
         {(isPlaying || isGameOver || allCollected) && (
           <div className="flex flex-col lg:flex-row gap-6">
             {/* Game Board */}
-            <div>
+            <div ref={boardContainerRef} className="w-full max-w-[400px]">
               <div className="flex items-center gap-4 mb-3 text-sm text-light-400">
                 <span>🎯 {collectedSkills.length}/{ALL_SKILLS.length} skills</span>
                 {food && <span className="text-accent-400">Next: {food.name}</span>}
               </div>
               <div
                 className="relative border-2 border-dark-700 rounded-lg overflow-hidden bg-dark-900 touch-none"
-                style={{ width: GRID_SIZE * CELL_SIZE, height: GRID_SIZE * CELL_SIZE }}
+                style={{ width: GRID_SIZE * cellSize, height: GRID_SIZE * cellSize }}
                 onTouchStart={handleTouchStart}
               >
                 {/* Snake */}
@@ -298,10 +315,10 @@ export default function TechSnakePage() {
                     key={i}
                     className={`absolute rounded-sm ${i === 0 ? "bg-accent-400" : "bg-accent-500/70"}`}
                     style={{
-                      left: segment.x * CELL_SIZE,
-                      top: segment.y * CELL_SIZE,
-                      width: CELL_SIZE - 1,
-                      height: CELL_SIZE - 1,
+                      left: segment.x * cellSize,
+                      top: segment.y * cellSize,
+                      width: cellSize - 1,
+                      height: cellSize - 1,
                     }}
                   />
                 ))}
@@ -310,10 +327,10 @@ export default function TechSnakePage() {
                   <div
                     className="absolute bg-yellow-400 rounded-full"
                     style={{
-                      left: food.position.x * CELL_SIZE,
-                      top: food.position.y * CELL_SIZE,
-                      width: CELL_SIZE - 1,
-                      height: CELL_SIZE - 1,
+                      left: food.position.x * cellSize,
+                      top: food.position.y * cellSize,
+                      width: cellSize - 1,
+                      height: cellSize - 1,
                     }}
                   />
                 )}

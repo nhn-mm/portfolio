@@ -7,9 +7,10 @@ interface MobileMenuProps {
   isOpen: boolean;
   onClose: () => void;
   navLinks: NavLink[];
+  getHref: (href: string) => string;
 }
 
-export default function MobileMenu({ isOpen, onClose, navLinks }: MobileMenuProps) {
+export default function MobileMenu({ isOpen, onClose, navLinks, getHref }: MobileMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,7 +48,7 @@ export default function MobileMenu({ isOpen, onClose, navLinks }: MobileMenuProp
         {navLinks.map((link) => (
           <li key={link.href} role="none">
             <a
-              href={link.href}
+              href={getHref(link.href)}
               role="menuitem"
               className="block rounded-md px-3 py-2 text-base text-light-400 hover:text-light-100 hover:bg-dark-800 focus:outline-none focus:ring-2 focus:ring-accent-400 focus:text-light-100 transition-colors"
               onClick={onClose}

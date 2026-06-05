@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 
 // All possible egg positions — 5 will be randomly selected each game
 const ALL_EGG_POSITIONS = [
@@ -43,7 +44,9 @@ export function EasterEggProvider({ children }: { children: ReactNode }) {
   const [isGameActive, setIsGameActive] = useState(false);
   const [activeEggs, setActiveEggs] = useState<string[]>([]);
   const [showingCelebration, setShowingCelebration] = useState(false);
+  const pathname = usePathname();
 
+  // Load state from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     const gameActive = localStorage.getItem(GAME_KEY);
@@ -51,21 +54,31 @@ export function EasterEggProvider({ children }: { children: ReactNode }) {
 
     if (gameActive === "true") {
       setIsGameActive(true);
-      if (stored) {
-        setFoundEggs(JSON.parse(stored));
-      }
-      if (storedActiveEggs) {
-        setActiveEggs(JSON.parse(storedActiveEggs));
-      }
+      if (stored) setFoundEggs(JSON.parse(stored));
+      if (storedActiveEggs) setActiveEggs(JSON.parse(storedActiveEggs));
     }
   }, []);
+
+  // Reset game when user navigates away from homepage (except to easter-eggs page)
+  useEffect(() => {
+    if (pathname !== "/" && pathname !== "/fun/easter-eggs") {
+      if (isGameActive) {
+        setFoundEggs([]);
+        setIsGameActive(false);
+        setActiveEggs([]);
+        setShowingCelebration(false);
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(GAME_KEY);
+        localStorage.removeItem(ACTIVE_EGGS_KEY);
+      }
+    }
+  }, [pathname, isGameActive]);
 
   // Auto-reset after all eggs found
   useEffect(() => {
     if (foundEggs.length >= TOTAL_EGGS && isGameActive && !showingCelebration) {
       setShowingCelebration(true);
       setTimeout(() => {
-        // Reset everything after 5 seconds
         setFoundEggs([]);
         setIsGameActive(false);
         setActiveEggs([]);
